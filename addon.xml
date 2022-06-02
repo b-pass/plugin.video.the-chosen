@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.the-chosen"
+       name="The Chosen"
+       version="0.1.0"
+       provider-name="b-pass">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+    <import addon="script.module.requests" version="2.22.0"/>
+    <import addon="script.module.inputstreamhelper" version="0.5.8+matrix.1"/>
+  </requires>
+  <extension point="xbmc.python.pluginsource" library="addon.py">
+    <provides>video</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Binge Jesus</summary>
+    <description lang="en_GB">We’re telling the story of Jesus in 7 seasons. We’ll bring our loaves and fishes, you bring yours by paying it forward, and together we’ll watch God work miracles.</description>
+    <disclaimer lang="en_GB">Unofficial and not affiliated with or specifically authorized by The Chosen or Angel Studios.</disclaimer>
+    <platform>all</platform>
+    <language>en</language>
+    <license>The Unlicense</license>
+    <website>https://watch.angelstudios.com/thechosen</website>
+    <source>https://github.com/b-pass/plugin.video.the-chosen</source>
+    <assets>
+        <icon>resources/icon.png</icon>
+        <fanart>resources/fanart.png</fanart>
+        <clearlogo>resources/clearlogo.png</clearlogo>
+    </assets>
+  </extension>
+</addon>
