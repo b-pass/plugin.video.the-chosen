@@ -53,7 +53,6 @@ def list_seasons():
 
         url = f'{PLUGIN_BASE}?action=season&id={id}'
         items.append((url, item, True))
-        log(url)
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
@@ -71,44 +70,43 @@ def list_episodes(sid):
    
     items = []
     for ep in episodes:
-       info = {
+        info = {
            'tvshowtitle':'The Chosen',
            'plot':ep.get('description', '')
-       }
+        }
 
-       if 'subtitle' in ep:
-           info['title'] = ep['subtitle']
-       else:
-           info['title'] = ep['name']
+        if 'subtitle' in ep:
+            info['title'] = ep['subtitle']
+        else:
+            info['title'] = ep['name']
         
-       item = xbmcgui.ListItem(info['title'])
+        item = xbmcgui.ListItem(info['title'])
         
-       poster = ep.get('posterCloudinaryPath', '')
-       if poster:
-           if not poster.startswith('http'):
-               poster = 'https://images.angelstudios.com/image/upload/' + poster
-           item.setArt({'landscape':poster})
+        poster = ep.get('posterCloudinaryPath', '')
+        if poster:
+            if not poster.startswith('http'):
+                poster = 'https://images.angelstudios.com/image/upload/' + poster
+            item.setArt({'landscape':poster, 'thumb':poster})
        
-       source = ep.get('source', {})
-       dur = source.get('duration', 0)
-       if dur:
-           info['duration'] = dur
+        source = ep.get('source', {})
+        dur = source.get('duration', 0)
+        if dur:
+            info['duration'] = dur
         
-       if sid:
-           info['mediatype'] = 'episode'
-           info['season'] = ep.get('seasonNumber', 0)
-           info['episode'] = ep.get('episodeNumber', 0)
-       else:
-           info['mediatype'] = 'video'
+        if sid:
+            info['mediatype'] = 'episode'
+            info['season'] = ep.get('seasonNumber', 0)
+            info['episode'] = ep.get('episodeNumber', 0)
+        else:
+            info['mediatype'] = 'video'
        
-       source = quote_plus(source.get("url", ""))
-       url = f'{PLUGIN_BASE}?action=play&url={source}'
-       log(url)
+        source = quote_plus(source.get("url", ""))
+        url = f'{PLUGIN_BASE}?action=play&url={source}'
        
-       item.setInfo('video', info)
-       item.setProperty('IsPlayable', 'true')
-       items.append((url, item, False))
-    
+        item.setInfo('video', info)
+        item.setProperty('IsPlayable', 'true')
+        items.append((url, item, False))
+        
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_EPISODE)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_TITLE_IGNORE_THE)
@@ -118,30 +116,29 @@ def list_episodes(sid):
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(url):
-   item = xbmcgui.ListItem(path=url, offscreen=True)
-   item.setProperty('inputstream','inputstream.adaptive')
-   item.setProperty('inputstream.adaptive.manifest_type', 'hls')
-   item.setMimeType('application/vnd.apple.mpegurl')
-   item.setProperty('IsPlayable', 'true')
-   xbmcplugin.setResolvedUrl(HANDLE, True, item)
+    log('play {}', url)
+    item = xbmcgui.ListItem(path=url, offscreen=True)
+    item.setProperty('inputstream','inputstream.adaptive')
+    item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+    item.setMimeType('application/vnd.apple.mpegurl')
+    item.setProperty('IsPlayable', 'true')
+    xbmcplugin.setResolvedUrl(HANDLE, True, item)
 
 if __name__ == '__main__':
-   PLUGIN_BASE = sys.argv[0]
-   HANDLE = int(sys.argv[1])
-   
-   log('{}', sys.argv)
+    PLUGIN_BASE = sys.argv[0]
+    HANDLE = int(sys.argv[1])
 
-   if len(sys.argv) > 2 and len(sys.argv[2]) > 1:
-       args = dict(parse_qsl(sys.argv[2][1:]))
-   else:
-       args = {}
+    if len(sys.argv) > 2 and len(sys.argv[2]) > 1:
+        args = dict(parse_qsl(sys.argv[2][1:]))
+    else:
+        args = {}
    
-   action = args.get('action', None)
-   if not action:
-       list_seasons()
-   elif action == 'season':
-       list_episodes(args.get('id'))
-   elif action == 'play':
-       play_video(args.get('url'))
-   else:
-       log('Unknown action in params: {}', args, level=xbmc.LOGERROR)
+    action = args.get('action', None)
+    if not action:
+        list_seasons()
+    elif action == 'season':
+        list_episodes(args.get('id'))
+    elif action == 'play':
+        play_video(args.get('url'))
+    else:
+        log('Unknown action in params: {}', args, level=xbmc.LOGERROR)
