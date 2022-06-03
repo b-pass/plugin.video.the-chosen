@@ -53,12 +53,83 @@ def list_seasons():
 
         url = f'{PLUGIN_BASE}?action=season&id={id}'
         items.append((url, item, True))
+    
+    
+    item = xbmcgui.ListItem(label='Bonus Videos')
+    item.setInfo('video', {
+        'title':'Bonus Videos', 
+        'season':100,
+        'mediatype':'season'
+    })
+    url = f'{PLUGIN_BASE}?action=bonus'
+    items.append((url, item, True))
+    
+    
+    item = xbmcgui.ListItem(label='Deep Dives')
+    item.setInfo('video', {
+        'title':'Deep Dives', 
+        'season':101,
+        'mediatype':'season'
+    })
+    url = f'{PLUGIN_BASE}?action=deepDive'
+    items.append((url, item, True))
+    
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_TITLE_IGNORE_THE)
-    #xbmcplugin.setContent(HANDLE, 'season')
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+
+def list_videos(page):
+    data = {
+        'query':'fragment CoreVideoFields on Video {  id  guid  slug  title  subtitle  page  projectSlug  posterCloudinaryPath  source {    url    credits    duration    name    __typename  }  __typename}\n'+
+                 'query getVideos($page: String) {  videos(page: $page) {    ...CoreVideoFields    __typename  }}',
+        'operationName': 'getVideos',
+        'variables':{'page':page}
+    }
+    resp = requests.post('https://chosen-hydra.vidangel.com/graphql', json=data)
+    if resp.status_code != 200:
+        log('POST graphql failed: code {}', resp.status_code)
+        resp = {}
+    else:
+        resp = resp.json()
+    
+    items = []
+    for video in resp.get('data', resp).get('videos', []):
+        item = xbmcgui.ListItem(label=video['title'])
+        
+        poster = video.get('posterCloudinaryPath', '')
+        if poster:
+            if not poster.startswith('http'):
+                poster = 'https://images.angelstudios.com/image/upload/' + poster
+            item.setArt({'landscape':poster, 'thumb':poster})
+        
+        info = {
+            'title':video['title'],
+            'plot':video.get('description', video.get('subtitle', '')),
+            'episode':video.get('id', 0),
+            'season':0,
+            'mediatype':'video',
+        }
+        
+        source = video.get('source', {})
+        dur = source.get('duration', 0)
+        if dur:
+            info['duration'] = dur
+        
+        item.setInfo('video', info)
+        item.setProperty('IsPlayable', 'true')
+        
+        source = quote_plus(source.get("url", ""))
+        url = f'{PLUGIN_BASE}?action=play&url={source}'
+        items.append((url, item, False))
+    
+    xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
+    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
+    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_EPISODE)
+    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
+    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_TITLE_IGNORE_THE)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_episodes(sid):
@@ -138,6 +209,10 @@ if __name__ == '__main__':
         list_seasons()
     elif action == 'season':
         list_episodes(args.get('id'))
+    elif action == 'bonus':
+        list_videos('bonus')
+    elif action == 'deepDive':
+        list_videos('deepDive')
     elif action == 'play':
         play_video(args.get('url'))
     else:
