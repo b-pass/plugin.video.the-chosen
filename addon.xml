@@ -21,7 +21,7 @@
     <website>https://watch.angelstudios.com/thechosen</website>
     <source>https://github.com/b-pass/plugin.video.the-chosen</source>
     <assets>
-        <icon>resources/icon.png</icon>
+        <icon>resources/icon.jpg</icon>
         <fanart>resources/fanart.png</fanart>
         <clearlogo>resources/clearlogo.png</clearlogo>
     </assets>
