@@ -1,5 +1,5 @@
 # plugin.video.the-chosen
-The Chosen unofficial video addon for Kodi.
+The Chosen unofficial video addon for Kodi.   Watch The Chosen right in kodi!
 
 "We’re telling the story of Jesus in 7 seasons. We’ll bring our loaves and fishes, you bring yours by paying it forward, and together we’ll watch God work miracles."
 
