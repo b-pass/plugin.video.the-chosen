@@ -29,7 +29,7 @@ def list_all():
         'operationName': 'videoList',
         'variables':{}
     }
-    resp = requests.post('https://chosen-hydra.vidangel.com/graphql', json=data)
+    resp = requests.post('https://api.angelstudios.com/graphql', json=data)
     if resp.status_code != 200:
         log('POST graphql failed: code {}', resp.status_code)
         resp = {}
@@ -88,7 +88,7 @@ def list_videos(page):
         'operationName': 'getVideos',
         'variables':{'page':page}
     }
-    resp = requests.post('https://chosen-hydra.vidangel.com/graphql', json=data)
+    resp = requests.post('https://api.angelstudios.com/graphql', json=data)
     if resp.status_code != 200:
         log('POST graphql failed: code {}', resp.status_code)
         resp = {}
