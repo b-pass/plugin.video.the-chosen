@@ -65,14 +65,14 @@ def list_seasons():
     items.append((url, item, True))
     
     
-    item = xbmcgui.ListItem(label='Deep Dives')
-    item.setInfo('video', {
-        'title':'Deep Dives', 
-        'season':101,
-        'mediatype':'season'
-    })
-    url = f'{PLUGIN_BASE}?action=deepDive'
-    items.append((url, item, True))
+    #item = xbmcgui.ListItem(label='Deep Dives')
+    #item.setInfo('video', {
+    #    'title':'Deep Dives', 
+    #    'season':101,
+    #    'mediatype':'season'
+    #})
+    #url = f'{PLUGIN_BASE}?action=deepDive'
+    #items.append((url, item, True))
     
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
