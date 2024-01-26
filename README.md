@@ -5,8 +5,8 @@ The Chosen unofficial video addon for Kodi.   Watch The Chosen right in kodi!
 
 ![](resources/icon.jpg?raw=true)
 
-Watch The Chosen at https://watch.angelstudios.com/thechosen
+Watch The Chosen at https://www.angelstudios.com/watch/the-chosen
 
 # Disclaimers
 
-This unofficial is not affiliated with or specifically authorized by The Chosen or Angel Studios. LICENSE refers to the code for this addon ONLY. Images and video included with or displayed by this addon belong to others and are licensed differently.
+This *unofficial* addon is not affiliated with or specifically authorized by The Chosen or Angel Studios. LICENSE refers to the code for this addon ONLY. Images and video included with or displayed by this addon belong to others and are licensed differently.
