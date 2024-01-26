@@ -43,11 +43,13 @@ def list_seasons():
     for season in list_all():
         id = season['id']
         item = xbmcgui.ListItem(label=season['name'])
+        snum = re.findall(r'\d+', season['name'])
+        snum = int(snum[0]) if len(snum) > 0 else 0
         item.setInfo('video', {
             'title':season['name'], 
             'set':season['name'], 
             'setoverview':season['name'], 
-            'season':int(season.get('id')),
+            'season':snum,
             'mediatype':'season'
         })
 
