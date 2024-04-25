@@ -5,188 +5,190 @@ import os
 import re
 import requests
 import json
+import time
 from urllib.parse import parse_qsl, quote_plus
 
 import xbmc
 import xbmcgui
 import xbmcaddon
 import xbmcplugin
+import xbmcvfs
 
-PLUGIN_BASE = None
-HANDLE = None
-
-# TODO also display "Bonus Content" and "Deep Dives"
+PLUGIN_BASE = ''
+HEADERS = {
+    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+    'Accept':'application/json, text/plain, */*',
+    'Referer':'https://watch.thechosen.tv/',
+    'Host':'watch.thechosen.tv',
+    'Accept':'application/json, text/plain, */*',
+    #"Sec-Fetch-Dest":"empty",
+    #"Sec-Fetch-Mode":"cors",
+    #"Sec-Fetch-Site":"cross-site",
+}
 
 def log(txt, *args, level=xbmc.LOGINFO):
     xbmc.log('the-chosen : ' + txt.format(*args), level=level)
 
-def list_all():
-    data = {
-        'query': 'fragment CoreEpisodeFields on Episode {\n  id\n  guid\n  episodeNumber\n  seasonNumber\n  seasonId\n  subtitle\n  description\n  name\n' + 
-                 '  posterCloudinaryPath\n  projectSlug\n  releaseDate\n  source {\n    captions\n    credits\n    duration\n    url\n    __typename\n  }\n' +
-                 '  upNext {\n    id\n    guid\n    __typename\n  }\n  __typename\n}\nquery videoList {\n  project(slug: "the-chosen") {\n    seasons {\n' +
-                 '      id\n      name\n      episodes {\n        ...CoreEpisodeFields\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n',
-        'operationName': 'videoList',
-        'variables':{}
-    }
-    resp = requests.post('https://api.angelstudios.com/graphql', json=data)
-    if resp.status_code != 200:
-        log('POST graphql failed: code {}', resp.status_code)
-        resp = {}
-    else:
-        resp = resp.json()
-    
-    return resp.get('data', resp).get('project', resp).get('seasons', [])
- 
-def list_seasons():
-    items = []
-    for season in list_all():
-        id = season['id']
-        item = xbmcgui.ListItem(label=season['name'])
-        snum = re.findall(r'\d+', season['name'])
-        snum = int(snum[0]) if len(snum) > 0 else 0
-        item.setInfo('video', {
-            'title':season['name'], 
-            'set':season['name'], 
-            'setoverview':season['name'], 
-            'season':snum,
-            'mediatype':'season'
-        })
+pageId = {
+        'main':128849018914,
+        'extras':128849018961,
+        'roundtables':128849018964,
+        'livestreams':128849019143,
+}
 
-        url = f'{PLUGIN_BASE}?action=season&id={id}'
-        items.append((url, item, True))
-    
-    
-    item = xbmcgui.ListItem(label='Bonus Videos')
-    item.setInfo('video', {
-        'title':'Bonus Videos', 
-        'season':100,
-        'mediatype':'season'
-    })
-    url = f'{PLUGIN_BASE}?action=bonus'
-    items.append((url, item, True))
-    
-    
-    #item = xbmcgui.ListItem(label='Deep Dives')
-    #item.setInfo('video', {
-    #    'title':'Deep Dives', 
-    #    'season':101,
-    #    'mediatype':'season'
-    #})
-    #url = f'{PLUGIN_BASE}?action=deepDive'
-    #items.append((url, item, True))
-    
+def get_data(page='main'):
+    pid = pageId[page]
+    fname = xbmcvfs.translatePath(f'special://temp/thechosen.{page}.json')
+    try:
+        m = os.path.getmtime(fname)
+        if m + 21600 > time.time():
+            return json.load(open(fname, 'r'))
+    except:
+        pass
+    resp = requests.get(f'https://watch.thechosen.tv/api/containers/Custom?pageID={pid}&first=100&orderByDir=ASC&orderByField=POSITION', headers=HEADERS)
+    if resp.status_code != 200:
+        log('GET failed: code {}', resp.status_code)
+        return {}
+
+    j = resp.json()
+    with open(fname, 'w') as f:
+        json.dump(j, f)
+    return j
+
+def list_page(page,sub=None,subsub=None):
+    items = []
+    n = 0
+    data = get_data(page)['pageContainers']['edges']
+    if sub is not None:
+        if sub >= 0 and sub < len(data):
+            data = data[sub]['node'].get('itemRefs',{}).get('edges',[])
+            if subsub is not None:
+                if subsub >= 0 and subsub < len(x):
+                    data = x[subsub]['node'].get('itemRefs',{}).get('edges',[])
+                else:
+                    log(f'Bad sub-sub item of {page}[{sub} - must be in range [0,{len(x)})')
+        else:
+            log(f'Bad sub page ({sub}) of {page} - must be in range [0,{len(data)})')
+
+    params = f'?action=list&page={page}&sub='
+    if sub is not None:
+        params += f'{sub}&subsub='
+
+    n = 0
+    haveContent = False
+    for d in data:
+        node = d['node']
+        if node.get('itemRef',None):
+            node = node['itemRef']
+        if node.get('contentItem',None):
+            tup = contentItem(node.get('contentItem'), n)
+            if tup:
+                items.append(tup)
+                haveContent = True
+        else:
+            season = node
+            sid = n
+
+            item = xbmcgui.ListItem(label=season['title'])
+            snum = re.findall(r'\d+', season['title'])
+            snum = int(snum[0]) if len(snum) > 0 else 100+n
+            info = item.getVideoInfoTag()
+            info.setTitle(season['title'])
+            info.setTvShowTitle('The Chosen')
+            info.setSeason(snum)
+            info.setSortSeason(snum)
+            info.setSortEpisode(snum + 1000)
+            info.setMediaType('season')
+            info.setSetOverview(season['title'])
+            info.setSet(season['title'])
+
+            url = f'{PLUGIN_BASE}' + params + str(n)
+            items.append((url, item, True))
+        n += 1
+
+    if page == 'main' and sub is None:
+        item = xbmcgui.ListItem(label='Extras')
+        info = item.getVideoInfoTag()
+        info.setTitle('Extras')
+        info.setTvShowTitle('The Chosen')
+        info.setSortSeason(200)
+        info.setMediaType('season')
+        items.append((f'{PLUGIN_BASE}?action=list&page=extras', item, True))
+
+        item = xbmcgui.ListItem(label='Roundtables')
+        info = item.getVideoInfoTag()
+        info.setTitle('Roundtables')
+        info.setTvShowTitle('The Chosen')
+        info.setSortSeason(201)
+        info.setMediaType('season')
+        items.append((f'{PLUGIN_BASE}?action=list&page=roundtables', item, True))
+
+        item = xbmcgui.ListItem(label='Livestreams')
+        info = item.getVideoInfoTag()
+        info.setTitle('Livestreams')
+        info.setTvShowTitle('The Chosen')
+        info.setSortSeason(201)
+        info.setMediaType('season')
+        items.append((f'{PLUGIN_BASE}?action=list&page=livestreams', item, True))
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
+    if not haveContent:
+        xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
+        xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_VIDEO_RUNTIME)
+        xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_DATEADDED)
+    else:
+        xbmcplugin.setContent(HANDLE, 'episode')
+        xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_EPISODE)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_TITLE_IGNORE_THE)
+    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
-def list_videos(page):
-    data = {
-        'query':'fragment CoreVideoFields on Video {  id  guid  slug  title  subtitle  page  projectSlug  posterCloudinaryPath  source {    url    credits    duration    name    __typename  }  __typename}\n'+
-                 'query getVideos($page: String) {  videos(page: $page) {    ...CoreVideoFields    __typename  }}',
-        'operationName': 'getVideos',
-        'variables':{'page':page}
-    }
-    resp = requests.post('https://api.angelstudios.com/graphql', json=data)
-    if resp.status_code != 200:
-        log('POST graphql failed: code {}', resp.status_code)
-        resp = {}
+def contentItem(ci, enum):
+    ep = ci.get('videoItem', None)
+    if not ep:
+        ep = ci.get('livestreamItem', None)
+
+    if not ep:
+        return None
+
+    item = xbmcgui.ListItem(ep['title'])
+    info = item.getVideoInfoTag()
+    info.setTvShowTitle('The Chosen')
+    info.setTitle(ep['title'])
+    info.setPlot(ep.get('description',''))
+        
+    poster = ep.get('thumbnail', '')
+    if poster:
+        item.setArt({'landscape':poster, 'thumb':poster})
+        info.addAvailableArtwork(poster, 'landscape')
+       
+    dur = ep.get('duration', 0)
+    if dur:
+        info.setDuration(int(dur))
+        
+    m = re.match(r'^\s*S\s*(\d+)\s*E\s*(\d+)\s*:.*$', ep['title'])
+    if m:
+        info.setMediaType('episode')
+        info.setSeason(int(m.group(1)))
+        info.setEpisode(int(m.group(2)))
     else:
-        resp = resp.json()
-    
-    items = []
-    for video in resp.get('data', resp).get('videos', []):
-        item = xbmcgui.ListItem(label=video['title'])
-        
-        poster = video.get('posterCloudinaryPath', '')
-        if poster:
-            if not poster.startswith('http'):
-                poster = 'https://images.angelstudios.com/image/upload/' + poster
-            item.setArt({'landscape':poster, 'thumb':poster})
-        
-        info = {
-            'title':video['title'],
-            'plot':video.get('description', video.get('subtitle', '')),
-            'episode':video.get('id', 0),
-            'season':0,
-            'mediatype':'video',
-        }
-        
-        source = video.get('source', {})
-        dur = source.get('duration', 0)
-        if dur:
-            info['duration'] = dur
-        
-        item.setInfo('video', info)
-        item.setProperty('IsPlayable', 'true')
-        
-        source = quote_plus(source.get("url", ""))
-        url = f'{PLUGIN_BASE}?action=play&url={source}'
-        items.append((url, item, False))
-    
-    xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_EPISODE)
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_TITLE_IGNORE_THE)
-    xbmcplugin.endOfDirectory(HANDLE)
+        info.setMediaType('video')
+    info.setSortEpisode(enum)
 
-def list_episodes(sid):
-    episodes = []
-    for season in list_all():
-        if str(season['id']) == str(sid):
-            episodes = season['episodes']
-            break
-   
-    items = []
-    for ep in episodes:
-        info = {
-           'tvshowtitle':'The Chosen',
-           'plot':ep.get('description', '')
-        }
-
-        if 'subtitle' in ep:
-            info['title'] = ep['subtitle']
-        else:
-            info['title'] = ep['name']
+    dt = ep.get('createdAt', '')
+    if dt:
+        p = dt.rfind('.')
+        if p > 0 and p < len(dt):
+            dt = dt[:p] + dt[-1]
+        info.setDateAdded(dt)
         
-        item = xbmcgui.ListItem(info['title'])
-        
-        poster = ep.get('posterCloudinaryPath', '')
-        if poster:
-            if not poster.startswith('http'):
-                poster = 'https://images.angelstudios.com/image/upload/' + poster
-            item.setArt({'landscape':poster, 'thumb':poster})
+    source = quote_plus(ep.get('url', ''))
+    url = f'{PLUGIN_BASE}?action=play&url={source}'
        
-        source = ep.get('source', {})
-        dur = source.get('duration', 0)
-        if dur:
-            info['duration'] = dur
-        
-        if sid:
-            info['mediatype'] = 'episode'
-            info['season'] = ep.get('seasonNumber', 0)
-            info['episode'] = ep.get('episodeNumber', 0)
-        else:
-            info['mediatype'] = 'video'
-       
-        source = quote_plus(source.get("url", ""))
-        url = f'{PLUGIN_BASE}?action=play&url={source}'
-       
-        item.setInfo('video', info)
-        item.setProperty('IsPlayable', 'true')
-        items.append((url, item, False))
-        
-    xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_EPISODE)
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_TITLE_IGNORE_THE)
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
-    xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_VIDEO_RUNTIME)
-    xbmcplugin.setContent(HANDLE, 'episode')
-    xbmcplugin.endOfDirectory(HANDLE)
+    item.setProperty('IsPlayable', 'true')
+    if dt:
+        item.setDateTime(dt)
+    return (url, item, False)
 
 def play_video(url):
     log('play {}', url)
@@ -208,14 +210,20 @@ if __name__ == '__main__':
    
     action = args.get('action', None)
     if not action:
-        list_seasons()
-    elif action == 'season':
-        list_episodes(args.get('id'))
-    elif action == 'bonus':
-        list_videos('bonus')
-    elif action == 'deepDive':
-        list_videos('deepDive')
+        list_page('main', None, None)
+    elif action == 'list':
+        if 'sub' in args:
+            sub = int(args['sub'])
+            if 'subsub' in args:
+                subsub = args.get('subsub')
+            else:
+                subsub = None
+        else:
+            sub = None
+            subsub = None
+        list_page(args['page'], sub, subsub)
     elif action == 'play':
         play_video(args.get('url'))
     else:
         log('Unknown action in params: {}', args, level=xbmc.LOGERROR)
+
