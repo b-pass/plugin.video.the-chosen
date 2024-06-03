@@ -34,6 +34,10 @@ pageId = {
         'extras':128849018961,
         'roundtables':128849018964,
         'livestreams':128849019143,
+        's1':128849018940,
+        's2':128849018941,
+        's3':128849018942,
+        's4':128849019156,
 }
 
 def get_data(page='main'):
@@ -76,6 +80,7 @@ def list_page(page,sub=None,subsub=None):
 
     n = 0
     haveContent = False
+    done = set()
     for d in data:
         node = d['node']
         if node.get('itemRef',None):
@@ -89,6 +94,7 @@ def list_page(page,sub=None,subsub=None):
             season = node
             sid = n
 
+            done.add(season['title'])
             item = xbmcgui.ListItem(label=season['title'])
             snum = re.findall(r'\d+', season['title'])
             snum = int(snum[0]) if len(snum) > 0 else 100+n
@@ -107,6 +113,19 @@ def list_page(page,sub=None,subsub=None):
         n += 1
 
     if page == 'main' and sub is None:
+        for i in range(7,0,-1):
+            k = f's{i}'
+            kn = f'Season {i}'
+            if k in pageId and kn not in done:
+                done.add(kn)
+                item = xbmcgui.ListItem(label=kn)
+                info = item.getVideoInfoTag()
+                info.setTitle(kn)
+                info.setTvShowTitle('The Chosen')
+                info.setSortSeason(200 + i)
+                info.setMediaType('season')
+                items.append((f'{PLUGIN_BASE}?action=list&page=s{i}', item, True))
+
         item = xbmcgui.ListItem(label='Extras')
         info = item.getVideoInfoTag()
         info.setTitle('Extras')
@@ -134,11 +153,11 @@ def list_page(page,sub=None,subsub=None):
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
     if not haveContent:
         xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
-        xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_VIDEO_RUNTIME)
-        xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_DATEADDED)
     else:
         xbmcplugin.setContent(HANDLE, 'episode')
         xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_EPISODE)
+        xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_VIDEO_RUNTIME)
+        xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_DATEADDED)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_TITLE_IGNORE_THE)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
@@ -151,10 +170,16 @@ def contentItem(ci, enum):
     if not ep:
         return None
 
-    item = xbmcgui.ListItem(ep['title'])
+    title = ep['title']
+    if not ep.get('hasAccess', True):
+        title = '(No Access) ' + title
+
+    item = xbmcgui.ListItem(title)
     info = item.getVideoInfoTag()
+    #if not ep.get('hasAccess', True):
+    #    info.setOverlay(3)
     info.setTvShowTitle('The Chosen')
-    info.setTitle(ep['title'])
+    info.setTitle(title)
     info.setPlot(ep.get('description',''))
         
     poster = ep.get('thumbnail', '')
@@ -181,13 +206,14 @@ def contentItem(ci, enum):
         if p > 0 and p < len(dt):
             dt = dt[:p] + dt[-1]
         info.setDateAdded(dt)
-        
-    source = quote_plus(ep.get('url', ''))
-    url = f'{PLUGIN_BASE}?action=play&url={source}'
+        item.setDateTime(dt)
+   
+    url = ep.get('url', '')
+    if url:
+      source = quote_plus(url)
+      url = f'{PLUGIN_BASE}?action=play&url={source}'
        
     item.setProperty('IsPlayable', 'true')
-    if dt:
-        item.setDateTime(dt)
     return (url, item, False)
 
 def play_video(url):
