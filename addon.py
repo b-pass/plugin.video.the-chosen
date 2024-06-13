@@ -32,35 +32,42 @@ def log(txt, *args, level=xbmc.LOGINFO):
 
 pageId = {
         'main':128849018914,
-        'extras':128849018961,
+        'old':128849019245,
+        's5filming':128849019155,
+
+        #'extras':128849018961,
+        'extras':128849019248,
+
         'roundtables':128849018964,
-        'livestreams':128849019143,
-        's1':128849018940,
-        's2':128849018941,
-        's3':128849018942,
-        's4':128849019156,
+        #'livestreams':128849019143,
+        #'s1':128849018940,
+        #'s2':128849018941,
+        #'s3':128849018942,
+        #'s4':128849019156,
 }
 
 def get_data(page='main'):
-    pid = pageId[page]
-    fname = xbmcvfs.translatePath(f'special://temp/thechosen.{page}.json')
+    pid = pageId.get(page, page)
+    cname = xbmcvfs.translatePath('special://profile/addon_data/plugin.video.the-chosen/cookie.txt')
     try:
-        m = os.path.getmtime(fname)
-        if m + 21600 > time.time():
-            return json.load(open(fname, 'r'))
+        m = os.path.getmtime(cname)
     except:
-        pass
-    cookie = addon.getSetting('cookie')
-    if cookie != "":
-        HEADERS["cookie"] = cookie
+        m = 0
+
+    if m + 86400*5 < time.time():
+        cookie = login()
+    else:
+        cookie = open(cname, 'r').read()
+    
+    if cookie:
+        HEADERS["Cookie"] = cookie
     resp = requests.get(f'https://watch.thechosen.tv/api/containers/Custom?pageID={pid}&first=100&orderByDir=ASC&orderByField=POSITION', headers=HEADERS)
     if resp.status_code != 200:
         log('GET failed: code {}', resp.status_code)
         return {}
 
     j = resp.json()
-    with open(fname, 'w') as f:
-        json.dump(j, f)
+    open(xbmcvfs.translatePath('special://temp/test.json'),'w').write(json.dumps(j))
     return j
 
 def list_page(page,sub=None,subsub=None):
@@ -117,7 +124,8 @@ def list_page(page,sub=None,subsub=None):
         n += 1
 
     if page == 'main' and sub is None:
-        for i in range(7,0,-1):
+        #for i in range(7,0,-1):
+        if False:
             k = f's{i}'
             kn = f'Season {i}'
             if k in pageId and kn not in done:
@@ -129,6 +137,14 @@ def list_page(page,sub=None,subsub=None):
                 info.setSortSeason(200 + i)
                 info.setMediaType('season')
                 items.append((f'{PLUGIN_BASE}?action=list&page=s{i}', item, True))
+
+        item = xbmcgui.ListItem(label='Seasons 1-3')
+        info = item.getVideoInfoTag()
+        info.setTitle('Seasons 1-3')
+        info.setTvShowTitle('The Chosen')
+        info.setSortSeason(200)
+        info.setMediaType('season')
+        items.append((f'{PLUGIN_BASE}?action=list&page=old', item, True))
 
         item = xbmcgui.ListItem(label='Extras')
         info = item.getVideoInfoTag()
@@ -146,15 +162,16 @@ def list_page(page,sub=None,subsub=None):
         info.setMediaType('season')
         items.append((f'{PLUGIN_BASE}?action=list&page=roundtables', item, True))
 
-        item = xbmcgui.ListItem(label='Livestreams')
+        '''item = xbmcgui.ListItem(label='Livestreams')
         info = item.getVideoInfoTag()
         info.setTitle('Livestreams')
         info.setTvShowTitle('The Chosen')
         info.setSortSeason(201)
         info.setMediaType('season')
-        items.append((f'{PLUGIN_BASE}?action=list&page=livestreams', item, True))
-        authItem = xbmcgui.ListItem("Login")
-        items.append((f'{PLUGIN_BASE}?action=login', authItem, False))
+        items.append((f'{PLUGIN_BASE}?action=list&page=livestreams', item, True))'''
+        
+        #authItem = xbmcgui.ListItem("Login")
+        #items.append((f'{PLUGIN_BASE}?action=login', authItem, False))
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
     if not haveContent:
@@ -178,7 +195,12 @@ def contentItem(ci, enum):
 
     title = ep['title']
     if not ep.get('hasAccess', True):
-        title = '(No Access) ' + title
+        if not addon.getSetting('username'):
+          title = '(Need Login) ' + title
+        else:
+          title = '(No Access) ' + title
+    if ep.get('state', '').upper() == 'UPCOMING':
+        title = '(Upcoming) ' + title
 
     item = xbmcgui.ListItem(title)
     info = item.getVideoInfoTag()
@@ -232,8 +254,10 @@ def play_video(url):
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
 
 def login():
-    username = xbmcgui.Dialog().input("Enter username or email",type=xbmcgui.INPUT_ALPHANUM)
-    password = xbmcgui.Dialog().input('Enter password', type=xbmcgui.INPUT_ALPHANUM, option=xbmcgui.ALPHANUM_HIDE_INPUT)
+    username = addon.getSetting('username')
+    password = addon.getSetting('password')
+    if not username or not password:
+        return None
 
     session = requests.Session()
     loginurl = "https://watch.thechosen.tv/"
@@ -244,13 +268,14 @@ def login():
     resp = session.post(loginurl, headers = loginheaders, json = json) 
     
     cookies = session.cookies.get_dict()
-    cookie_string = ''
     if cookies == {}:
         xbmcgui.Dialog().ok("Login Fail", "Login attempt failed")
+        return None
     else:
         cookie_string = '; '.join([f"{key}={value}" for key, value in cookies.items()])
-        addon.setSetting('cookie',cookie_string)
-
+        cname = xbmcvfs.translatePath('special://profile/addon_data/plugin.video.the-chosen/cookie.txt')
+        open(cname, 'w').write(cookie_string)
+        return cookie_string
 
 if __name__ == '__main__':
     PLUGIN_BASE = sys.argv[0]
