@@ -25,6 +25,7 @@ HEADERS = {
     #"Sec-Fetch-Mode":"cors",
     #"Sec-Fetch-Site":"cross-site",
 }
+addon = xbmcaddon.Addon('plugin.video.the-chosen')
 
 def log(txt, *args, level=xbmc.LOGINFO):
     xbmc.log('the-chosen : ' + txt.format(*args), level=level)
@@ -49,6 +50,9 @@ def get_data(page='main'):
             return json.load(open(fname, 'r'))
     except:
         pass
+    cookie = addon.getSetting('cookie')
+    if cookie != "":
+        HEADERS["cookie"] = cookie
     resp = requests.get(f'https://watch.thechosen.tv/api/containers/Custom?pageID={pid}&first=100&orderByDir=ASC&orderByField=POSITION', headers=HEADERS)
     if resp.status_code != 200:
         log('GET failed: code {}', resp.status_code)
@@ -149,6 +153,8 @@ def list_page(page,sub=None,subsub=None):
         info.setSortSeason(201)
         info.setMediaType('season')
         items.append((f'{PLUGIN_BASE}?action=list&page=livestreams', item, True))
+        authItem = xbmcgui.ListItem("Login")
+        items.append((f'{PLUGIN_BASE}?action=login', authItem, False))
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
     if not haveContent:
@@ -225,6 +231,27 @@ def play_video(url):
     item.setProperty('IsPlayable', 'true')
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
 
+def login():
+    username = xbmcgui.Dialog().input("Enter username or email",type=xbmcgui.INPUT_ALPHANUM)
+    password = xbmcgui.Dialog().input('Enter password', type=xbmcgui.INPUT_ALPHANUM, option=xbmcgui.ALPHANUM_HIDE_INPUT)
+
+    session = requests.Session()
+    loginurl = "https://watch.thechosen.tv/"
+    loginheaders = {
+        'Next-Action': '42bfd550d46990e907d7b4bde08d059f83c8cd87'
+    }
+    json = [{"username":username,"password":password,"subscriptionID":"$undefined"}]
+    resp = session.post(loginurl, headers = loginheaders, json = json) 
+    
+    cookies = session.cookies.get_dict()
+    cookie_string = ''
+    if cookies == {}:
+        xbmcgui.Dialog().ok("Login Fail", "Login attempt failed")
+    else:
+        cookie_string = '; '.join([f"{key}={value}" for key, value in cookies.items()])
+        addon.setSetting('cookie',cookie_string)
+
+
 if __name__ == '__main__':
     PLUGIN_BASE = sys.argv[0]
     HANDLE = int(sys.argv[1])
@@ -250,6 +277,8 @@ if __name__ == '__main__':
         list_page(args['page'], sub, subsub)
     elif action == 'play':
         play_video(args.get('url'))
+    elif action == 'login':
+        login()
     else:
         log('Unknown action in params: {}', args, level=xbmc.LOGERROR)
 

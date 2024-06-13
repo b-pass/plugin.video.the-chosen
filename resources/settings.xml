@@ -1,0 +1,3 @@
+<settings>
+    <setting id="cookie" type="text" label="30200" default="" enable="true"/>
+</settings>
