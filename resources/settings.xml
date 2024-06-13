@@ -1,3 +1,6 @@
 <settings>
-    <setting id="cookie" type="text" label="30200" default="" enable="true"/>
+    <category label="16000">
+        <setting label="1048" type="text"   id="username" default=""/>
+        <setting label="733" type="text"   id="password" option="hidden"  enable="!eq(-1,)" default=""/>
+    </category>
 </settings>
