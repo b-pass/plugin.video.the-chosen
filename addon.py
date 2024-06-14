@@ -43,7 +43,7 @@ pageId = {
         #'s1':128849018940,
         #'s2':128849018941,
         #'s3':128849018942,
-        #'s4':128849019156,
+        's4':128849019156,
 }
 
 def get_data(page='main'):
@@ -92,6 +92,22 @@ def list_page(page,sub=None,subsub=None):
     n = 0
     haveContent = False
     done = set()
+
+    if page == 'main' and sub is None:
+        #for i in range(7,0,-1):
+        for i in [4]:
+            k = f's{i}'
+            kn = f'Season {i}'
+            if k in pageId and kn not in done:
+                done.add(kn)
+                item = xbmcgui.ListItem(label=kn)
+                info = item.getVideoInfoTag()
+                info.setTitle(kn)
+                info.setTvShowTitle('The Chosen')
+                info.setSortSeason(200 + i)
+                info.setMediaType('season')
+                items.append((f'{PLUGIN_BASE}?action=list&page=s{i}', item, True))
+
     for d in data:
         node = d['node']
         if node.get('itemRef',None):
@@ -105,6 +121,8 @@ def list_page(page,sub=None,subsub=None):
             season = node
             sid = n
 
+            if season['title'] in done:
+                continue
             done.add(season['title'])
             item = xbmcgui.ListItem(label=season['title'])
             snum = re.findall(r'\d+', season['title'])
@@ -124,20 +142,6 @@ def list_page(page,sub=None,subsub=None):
         n += 1
 
     if page == 'main' and sub is None:
-        #for i in range(7,0,-1):
-        for i in [4]:
-            k = f's{i}'
-            kn = f'Season {i}'
-            if k in pageId and kn not in done:
-                done.add(kn)
-                item = xbmcgui.ListItem(label=kn)
-                info = item.getVideoInfoTag()
-                info.setTitle(kn)
-                info.setTvShowTitle('The Chosen')
-                info.setSortSeason(200 + i)
-                info.setMediaType('season')
-                items.append((f'{PLUGIN_BASE}?action=list&page=s{i}', item, True))
-
         item = xbmcgui.ListItem(label='Seasons 1-3')
         info = item.getVideoInfoTag()
         info.setTitle('Seasons 1-3')
