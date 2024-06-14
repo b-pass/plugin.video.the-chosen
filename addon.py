@@ -67,7 +67,7 @@ def get_data(page='main'):
         return {}
 
     j = resp.json()
-    open(xbmcvfs.translatePath('special://temp/test.json'),'w').write(json.dumps(j))
+    #open(xbmcvfs.translatePath('special://temp/test.json'),'w').write(json.dumps(j))
     return j
 
 def list_page(page,sub=None,subsub=None):
@@ -125,7 +125,7 @@ def list_page(page,sub=None,subsub=None):
 
     if page == 'main' and sub is None:
         #for i in range(7,0,-1):
-        if False:
+        for i in [4]:
             k = f's{i}'
             kn = f'Season {i}'
             if k in pageId and kn not in done:
@@ -142,15 +142,23 @@ def list_page(page,sub=None,subsub=None):
         info = item.getVideoInfoTag()
         info.setTitle('Seasons 1-3')
         info.setTvShowTitle('The Chosen')
-        info.setSortSeason(200)
+        info.setSortSeason(201)
         info.setMediaType('season')
         items.append((f'{PLUGIN_BASE}?action=list&page=old', item, True))
+
+        item = xbmcgui.ListItem(label='Season 5 Filming')
+        info = item.getVideoInfoTag()
+        info.setTitle('Seasons 5 Filming')
+        info.setTvShowTitle('The Chosen')
+        info.setSortSeason(205)
+        info.setMediaType('season')
+        items.append((f'{PLUGIN_BASE}?action=list&page=s5filming', item, True))
 
         item = xbmcgui.ListItem(label='Extras')
         info = item.getVideoInfoTag()
         info.setTitle('Extras')
         info.setTvShowTitle('The Chosen')
-        info.setSortSeason(200)
+        info.setSortSeason(298)
         info.setMediaType('season')
         items.append((f'{PLUGIN_BASE}?action=list&page=extras', item, True))
 
@@ -158,7 +166,7 @@ def list_page(page,sub=None,subsub=None):
         info = item.getVideoInfoTag()
         info.setTitle('Roundtables')
         info.setTvShowTitle('The Chosen')
-        info.setSortSeason(201)
+        info.setSortSeason(299)
         info.setMediaType('season')
         items.append((f'{PLUGIN_BASE}?action=list&page=roundtables', item, True))
 
