@@ -89,7 +89,6 @@ def list_page(page,sub=None,subsub=None):
     if sub is not None:
         params += f'{sub}&subsub='
 
-    n = 0
     haveContent = False
     done = set()
 
@@ -108,25 +107,27 @@ def list_page(page,sub=None,subsub=None):
                 info.setMediaType('season')
                 items.append((f'{PLUGIN_BASE}?action=list&page=s{i}', item, True))
 
+    n = 0
     for d in data:
         node = d['node']
+        nsub = n
+        n += 1
         if node.get('itemRef',None):
             node = node['itemRef']
         if node.get('contentItem',None):
-            tup = contentItem(node.get('contentItem'), n)
+            tup = contentItem(node.get('contentItem'), nsub)
             if tup:
                 items.append(tup)
                 haveContent = True
         else:
             season = node
-            sid = n
 
             if season['title'] in done:
                 continue
             done.add(season['title'])
             item = xbmcgui.ListItem(label=season['title'])
             snum = re.findall(r'\d+', season['title'])
-            snum = int(snum[0]) if len(snum) > 0 else 100+n
+            snum = int(snum[0]) if len(snum) > 0 else 100+nsub
             info = item.getVideoInfoTag()
             info.setTitle(season['title'])
             info.setTvShowTitle('The Chosen')
@@ -137,7 +138,7 @@ def list_page(page,sub=None,subsub=None):
             info.setSetOverview(season['title'])
             info.setSet(season['title'])
 
-            url = f'{PLUGIN_BASE}' + params + str(n)
+            url = f'{PLUGIN_BASE}' + params + str(nsub)
             items.append((url, item, True))
         n += 1
 
@@ -197,7 +198,7 @@ def list_page(page,sub=None,subsub=None):
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
-def contentItem(ci, enum):
+def contentItem(ci, esort):
     ep = ci.get('videoItem', None)
     if not ep:
         ep = ci.get('livestreamItem', None)
@@ -238,7 +239,7 @@ def contentItem(ci, enum):
         info.setEpisode(int(m.group(2)))
     else:
         info.setMediaType('video')
-    info.setSortEpisode(enum)
+    info.setSortEpisode(esort)
 
     dt = ep.get('createdAt', '')
     if dt:
