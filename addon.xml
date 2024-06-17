@@ -4,7 +4,7 @@
        version="0.4.2"
        provider-name="b-pass">
   <requires>
-    <import addon="xbmc.python" version="3.0.0"/>
+    <import addon="xbmc.python" version="3.0.1"/>
     <import addon="script.module.requests" version="2.22.0"/>
     <import addon="script.module.inputstreamhelper" version="0.5.8+matrix.1"/>
   </requires>
