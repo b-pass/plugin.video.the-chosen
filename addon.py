@@ -15,7 +15,7 @@ import xbmcplugin
 import xbmcvfs
 
 PLUGIN_BASE = ''
-DO_CACHE = False # set me to True when not debugging....
+DO_CACHE = True # set me to True when not debugging....
 
 addon = xbmcaddon.Addon('plugin.video.the-chosen')
 
@@ -207,8 +207,6 @@ def list_subpage(page):
     data = api_query(subpage_query, pageContainerID=page)
     thispage = getem(data, 'data', 'pageContainer')
 
-    log('thispage {}', str(thispage))
-
     items = []
     for ve in getem(thispage, 'itemRefs', 'edges'):
         n = ve.get('node', {})
@@ -250,8 +248,6 @@ def contentItem(ci, esort=None):
 
     item = xbmcgui.ListItem(title)
     info = item.getVideoInfoTag()
-    #if not ep.get('hasAccess', True):
-    #    info.setOverlay(3)
     info.setTvShowTitle('The Chosen')
     info.setTitle(title)
     info.setPlot(ep.get('description',''))
@@ -286,13 +282,11 @@ def contentItem(ci, esort=None):
         item.setDateTime(dt)
    
     url = ep.get('url', '')
-    if url:
-        item.setProperty('IsPlayable', 'true')
-        return (f'{PLUGIN_BASE}?action=play&url={quote_plus(url)}', item, False)
-    elif needLogin:
-        return (f'{PLUGIN_BASE}?action=force_login', item, False)    
-    else:
-        return (f'{PLUGIN_BASE}?action=play&url=', item, False)
+    if needLogin and not url:
+        return (f'{PLUGIN_BASE}?action=force_login', item, False)
+    
+    item.setProperty('IsPlayable', 'true')
+    return (f'{PLUGIN_BASE}?action=play&url={quote_plus(url)}', item, False)
 
 def force_login():
     addon.setSetting('tokenTime', '0')
