@@ -21,15 +21,16 @@ addon = xbmcaddon.Addon('plugin.video.the-chosen')
 
 apiurl = "https://api.frontrow.cc/query"
 apiheaders = {
-    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0',
+    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/134.0',
     'Accept':'application/json, text/plain, */*',
     'Referer': 'https://watch.thechosen.tv/',
+    'Origin': 'https://watch.thechosen.tv',
     'Host':'api.frontrow.cc',
     'channelid': '12884901895',
     'x-client-os': 'kodi',
     'x-client-os-version': 'unknown',
     'x-client-platform': 'web',
-    'x-client-version': '2.5.264',
+    'x-client-version': '2.5.664',
     'language' : str(xbmc.getLanguage(xbmc.ISO_639_1)).lower(),
 }
 
@@ -73,7 +74,14 @@ def login(session:requests.Session):
         
         try:
             d = getem(resp_obj, 'data', 'login')
-            token = f"{d['tokenType']} {d['accessToken']}"
+            if d.get('tokenType', None):
+                token = d.get('accessToken', '')
+                if token:
+                    token = d['tokenType'] + " " + d['accessToken']
+            else:
+                token = d.get('accessToken', '')
+                if token:
+                    token = 'Bearer ' + token
         except Exception as e:
             log("Login exception: {}", str(e))
             pass
