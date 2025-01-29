@@ -150,7 +150,18 @@ def api_query(req_json, **vars):
 
     resp = session.post(apiurl, headers=apiheaders, json=req_json)
     if resp.status_code >= 400:
-        xbmcgui.Dialog().ok("API Fail", f"Remote API post failed: {resp.status_code} {resp.reason}")
+        # if the auth failed, just delete the token so the next request will be unauthed
+        if resp.status_code == 401 and 'authentication' in apiheaders:
+            del apiheaders['authorization']
+            addon.setSetting('authorization', '')
+            
+            xbmcgui.Dialog().ok("Auth Fail", f"Authentication failed: {resp.status_code} {resp.reason}\n\nWill retry unauthenticated...")
+
+            resp = session.post(apiurl, headers=apiheaders, json=req_json)
+            if resp.status_code < 400:
+                return resp.json()
+        else:
+            xbmcgui.Dialog().ok("API Fail", f"Remote API post failed: {resp.status_code} {resp.reason}")
         return {}
     else:
         return resp.json()
