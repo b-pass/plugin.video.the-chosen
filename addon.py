@@ -227,14 +227,23 @@ def list_subpage(page):
     thispage = getem(data, 'data', 'pageContainer')
 
     items = []
+    urls = {}
     for ve in getem(thispage, 'itemRefs', 'edges'):
         n = ve.get('node', {})
         ci = n.get('contentItem', {})
         if ci:
-            it = contentItem(ci, int(n.get('position', 0)))
-            if it:
-                items.append(it)
+            (url, itemid, item) = contentItem(ci, esort=int(n.get('position', 0)))
+            if not url:
+                if item is not None:
+                    items.append((f'{PLUGIN_BASE}?action=force_login', item, False))
+            else:
+                urls[itemid] = url
+                item.setProperty('IsPlayable', 'true')
+                items.append((f'{PLUGIN_BASE}?action=play&page={page}&itemid={itemid}', item, False))
     
+    with open(xbmcvfs.translatePath(f'special://temp/the-chosen.{page}.json'), 'w') as f:
+        json.dump(urls, f)
+
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
     xbmcplugin.setContent(HANDLE, 'episode')
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_EPISODE)
@@ -242,7 +251,7 @@ def list_subpage(page):
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_DATEADDED)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_TITLE_IGNORE_THE)
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=DO_CACHE)
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
     return
 
 def contentItem(ci, esort=None):
@@ -251,7 +260,7 @@ def contentItem(ci, esort=None):
         ep = ci.get('livestreamItem', None)
 
     if not ep:
-        return None
+        return (None, None, None)
 
     title = ep['title']
     
@@ -270,7 +279,7 @@ def contentItem(ci, esort=None):
     info.setTvShowTitle('The Chosen')
     info.setTitle(title)
     info.setPlot(ep.get('description',''))
-        
+    
     poster = ep.get('thumbnail', '')
     if poster:
         item.setArt({'landscape':poster, 'thumb':poster})
@@ -302,10 +311,10 @@ def contentItem(ci, esort=None):
    
     url = ep.get('url', '')
     if needLogin and not url:
-        return (f'{PLUGIN_BASE}?action=force_login', item, False)
+        return (None, 0, item)
     
-    item.setProperty('IsPlayable', 'true')
-    return (f'{PLUGIN_BASE}?action=play&url={quote_plus(url)}', item, False)
+    itemid = ep.get('id', quote_plus(title))
+    return (url, itemid, item)
 
 def force_login():
     addon.setSetting('tokenTime', '0')
@@ -319,14 +328,21 @@ def force_login():
     login(requests.Session())
     xbmc.executebuiltin('Action(Back)')
 
-def play_video(url):
-    log('play {}', url)
+def play_video(page, itemid):
+    log('play {} {}', page, itemid)
+
+    urls = {}
+    with open(xbmcvfs.translatePath(f'special://temp/the-chosen.{page}.json'), 'r') as f:
+        urls = json.load(f)
+    
+    url = urls.get(itemid, '')
+
     item = xbmcgui.ListItem(path=url, offscreen=True)
     item.setProperty('inputstream','inputstream.adaptive')
     item.setProperty('inputstream.adaptive.manifest_type', 'hls')
     item.setMimeType('application/vnd.apple.mpegurl')
     item.setProperty('IsPlayable', 'true')
-    xbmcplugin.setResolvedUrl(HANDLE, True, item)
+    xbmcplugin.setResolvedUrl(HANDLE, len(url) > 0, item)
 
 if __name__ == '__main__':
     PLUGIN_BASE = sys.argv[0]
@@ -345,7 +361,7 @@ if __name__ == '__main__':
     elif action == 'subpage':
         list_subpage(args['page'])
     elif action == 'play':
-        play_video(args.get('url'))
+        play_video(args.get('page'), args.get('itemid'))
     elif action == 'force_login':
         force_login()
     else:
