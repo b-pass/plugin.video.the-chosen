@@ -196,17 +196,17 @@ def list_page(page):
             title = n.get('title', '')
             if not title:
                 continue
-
-        m = re.match(r'^.*season-(\d+)$', id, re.S)
-        season = int(m.group(1)) if m else 0
         
         item = xbmcgui.ListItem(label=title)
         info = item.getVideoInfoTag()
         info.setTitle(title)
         info.setTvShowTitle('The Chosen')
         info.setMediaType('season')
-        if season:
-            info.setSeason(season)
+
+        m = re.match(r'^.*season-(\d+)$', id, re.S)
+        if m:
+            info.setSeason(int(m.group(1)))
+        
         items.append((f'{PLUGIN_BASE}?action=playlist&playlist={id}&season={season}', item, True))
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
