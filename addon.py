@@ -197,10 +197,9 @@ def list_page(page):
             if not title:
                 continue
 
-        m = re.match(r'.*season-(\d+)$', id)
-        if m:
-            season = int(m.group(1))
-
+        m = re.match(r'^.*season-(\d+)$', id, re.S)
+        season = int(m.group(1)) if m else 0
+        
         item = xbmcgui.ListItem(label=title)
         info = item.getVideoInfoTag()
         info.setTitle(title)
@@ -328,7 +327,7 @@ def force_login():
     xbmc.executebuiltin('Action(Back)')
 
 def play_video(itemid, playlist):
-    log('play {} {}', playlist, itemid)
+    #log('play {} {}', playlist, itemid)
 
     #urls = {}
     #with open(xbmcvfs.translatePath(f'special://temp/the-chosen.{page}.json'), 'r') as f:
