@@ -111,30 +111,22 @@ def get_auth(session):
         pass
     return False
 
-def api_query(slug, req_json={}, **vars):
-    if vars:
-        req_json = dict(req_json)
-        var = req_json.get('variables', {})
-        for k,v in vars.items():
-            var[str(k)] = str(v)
-    
+def api_query(slug):
     session = requests.Session()
     
-    get_auth(session)
+    # currently nothing seems to require auth, so dont force through an OTP...
+    #get_auth(session)
 
-    if req_json:
-        resp = session.post(apiurl + slug, headers=apiheaders, json=req_json)
-    else:
-        resp = session.get(apiurl + slug, headers=apiheaders)
+    resp = session.get(apiurl + slug, headers=apiheaders)
     if resp.status_code >= 400:
         # if the auth failed, just delete the token so the next request will be unauthed
-        if resp.status_code == 401 and 'authentication' in apiheaders:
-            del apiheaders['authorization']
+        if resp.status_code == 401 and 'Authorization' in apiheaders:
+            del apiheaders['Authorization']
             addon.setSetting('authorization', '')
             
             xbmcgui.Dialog().ok("Auth Fail", f"Authentication failed: {resp.status_code} {resp.reason}\n\nWill retry unauthenticated...")
 
-            resp = session.post(apiurl, headers=apiheaders, json=req_json)
+            resp = session.get(apiurl + slug, headers=apiheaders)
             if resp.status_code < 400:
                 return resp.json()
         else:
@@ -169,7 +161,7 @@ def list_main():
             dopage(n.get('href', ''), n.get('name', ''))
         # store is type "external"
 
-    authItem = xbmcgui.ListItem("Login")
+    authItem = xbmcgui.ListItem("Log in")
     items.append((f'{PLUGIN_BASE}?action=login', authItem, False))
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
@@ -203,13 +195,14 @@ def list_page(page):
         m = re.match(r'.*season-(\d+)$', id)
         if m:
             season = int(m.group(1))
-            info.setSeason(season)
 
         item = xbmcgui.ListItem(label=title)
         info = item.getVideoInfoTag()
         info.setTitle(title)
         info.setTvShowTitle('The Chosen')
         info.setMediaType('season')
+        if season:
+            info.setSeason(season)
         items.append((f'{PLUGIN_BASE}?action=playlist&playlist={id}&season={season}', item, True))
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
