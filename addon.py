@@ -130,7 +130,7 @@ def api_query(slug):
             if resp.status_code < 400:
                 return resp.json()
         else:
-            xbmcgui.Dialog().ok("API Fail", f"Remote API post failed: {resp.status_code} {resp.reason}")
+            xbmcgui.Dialog().ok("API Fail", f"Remote API get {slug} failed: {resp.status_code} {resp.reason}")
         return {}
     else:
         return resp.json()
@@ -140,7 +140,7 @@ def list_main():
 
     items = []
     def dopage(id, title):
-        if not title or not id:
+        if not title or not id or id == 'home':
             return
         
         item = xbmcgui.ListItem(label=title)
@@ -187,10 +187,15 @@ def list_page(page):
 
         if not n.get('items', []):
             continue
+
+        id = n.get('slug', id)
+        if not id:
+            continue
         
         if not title:
             title = n.get('title', '')
-        id = n.get('slug', id)
+            if not title:
+                continue
 
         m = re.match(r'.*season-(\d+)$', id)
         if m:
@@ -330,7 +335,7 @@ def play_video(itemid, playlist):
     #    urls = json.load(f)
     #url = urls.get(itemid, '')
 
-    video = api_query('videos/{itemid}')
+    video = api_query(f'videos/{itemid}')
     url = getem(video, 'details', 'video')
     if url and len(url):
         url = url[0]
@@ -359,7 +364,7 @@ if __name__ == '__main__':
     elif action == 'page':
         list_page(args['page'])
     elif action == 'playlist':
-        list_playlist(args['playlist'], args.get('season', 0))
+        list_playlist(args['playlist'], int(args.get('season', 0)))
     elif action == 'play':
         play_video(args['itemid'], args.get('playlist', ''))
     elif action == 'force_login':
