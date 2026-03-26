@@ -177,14 +177,10 @@ def list_page(page):
     season = 0
     #log("D: {}", str(data))
     for n in getem(data, 'data', 'sections'):
-        if n.get('source', '') != 'playlist':
-            continue
-
         title = n.get('displayTitle', '')
         id = n.get('href', '')
 
         n = n.get('playlist', n)
-
         if not n.get('items', []):
             continue
 
