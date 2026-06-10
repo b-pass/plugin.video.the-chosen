@@ -161,8 +161,15 @@ def list_main():
             dopage(n.get('href', ''), n.get('name', ''))
         # store is type "external"
 
-    authItem = xbmcgui.ListItem("Log in")
-    items.append((f'{PLUGIN_BASE}?action=login', authItem, False))
+
+    try:
+        w = int(addon.getSetting('tokenTime'))
+    except:
+        w = 0
+
+    if w + 86400 < time.time():
+        authItem = xbmcgui.ListItem("Log in")
+        items.append((f'{PLUGIN_BASE}?action=login', authItem, False))
 
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
@@ -317,7 +324,7 @@ def force_login():
     username = addon.getSetting('username')
 
     if not username:
-        xbmcaddon.openSettings()
+        xbmcaddon.Addon().openSettings()
     
     login(requests.Session())
     xbmc.executebuiltin('Action(Back)')
@@ -362,7 +369,7 @@ if __name__ == '__main__':
         list_playlist(args['playlist'], int(args.get('season', 0)))
     elif action == 'play':
         play_video(args['itemid'], args.get('playlist', ''))
-    elif action == 'force_login':
+    elif action == 'login' or action == 'force_login':
         force_login()
     else:
         log('Unknown action in params: {}', args, level=xbmc.LOGERROR)
