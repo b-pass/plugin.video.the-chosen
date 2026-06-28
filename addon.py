@@ -52,21 +52,25 @@ def login(session:requests.Session):
     username = addon.getSetting('username')
     #password = addon.getSetting('password')
 
-    addon.setSetting('tokenTime', str(int(time.time())))
     if username:
         addon.setSetting('authorization', '')
         addon.setSetting('tokens', '')
 
-        resp = session.post(apiurl + 'auth/request-otp', headers=apiheaders, json={"email" : username, "locale":apiheaders['X-language']}) 
+        # yes, weirdly the OTP calls are "v2" (not "v1" like everything else)
+        resp = session.post('https://api.watch.thechosen.tv/v2/auth/request-otp', headers=apiheaders, json={"email" : username, "locale":apiheaders['X-language']}) 
         
         resp_obj = resp.json()
         
         try:
-            if 'isDOBExists' in resp_obj and not resp_obj['isDOBExists']:
+            if resp_obj.get('isNewUser', False):
+                xbmcgui.Dialog().ok("First Login", f"Log in via a web browser to set up your account.")
+                return False
+            
+            if resp_obj.get('ageVerified', True):
                 xbmcgui.Dialog().ok("Login Failed", f"Your account does not have a Date of Birth listed. Log in via a web browser and set your birthdate.")
                 return False
             
-            if 'ok' in resp_obj and not resp_obj['ok']:
+            if resp_obj.get('ok', True):
                 log("ok is false: {}", json.dumps(resp_obj))
                 xbmcgui.Dialog().ok("Login Failed", f"Login attempt failed to send OTP code\n{resp.status_code} {resp.reason}")
                 return False
@@ -75,65 +79,74 @@ def login(session:requests.Session):
             if not code:
                 return False
             
-            resp = session.post(apiurl + 'auth/verify-otp', headers=apiheaders, json={"email" : username, "code":str(code)}) 
+            code = str(code)
+            while len(code) < 6:
+                code = '0' + code
+            
+            resp = session.post('https://api.watch.thechosen.tv/v2/auth/verify-otp', headers=apiheaders, json={"email" : username, "code":str(code)}) 
             resp_obj = resp.json()
 
-            addon.setSetting('tokens', json.dumps(resp_obj))
             token = f"Bearer {resp_obj['idToken']}"
-            addon.setSetting('authorization', token)
             apiheaders['Authorization'] = token
+            addon.setSetting('authorization', token)
+            addon.setSetting('tokens', json.dumps(resp_obj))
             log('Login OK')
             return True
         except Exception as e:
             log("Login exception: {}", str(e))
             pass
         
-        addon.setSetting('authorization', '')
         xbmcgui.Dialog().ok("Login Failed", f"Login attempt failed to produce an authentication token.\n{resp.status_code} {resp.reason}")
-    
+
+    addon.setSetting('authorization', '')
+    addon.setSetting('tokens', '')
     return False
 
-def get_auth(session):
+def refresh(session):
     try:
-        w = int(addon.getSetting('tokenTime'))
-    except:
-        w = 0
-    
-    if w + 86400 < time.time():
-        login(session)
-    
-    try:
-        a = addon.getSetting('authorization')
-        if a and type(a) is str:
-            apiheaders['Authorization'] = a
+        tokens = json.loads(str(addon.getSetting('tokens')))
+        #if 'Authorization' in apiheaders: del apiheaders['Authorization']
+
+        resp = session.post(apiurl + '/auth/refresh', headers=apiheaders, json={"refreshToken" : tokens.get('refreshToken')}) 
+        if resp.status_code == 200:
+            tokens = resp.json()
+
+            token = f"Bearer {tokens['idToken']}"
+            apiheaders['Authorization'] = token
+            addon.setSetting('authorization', token)
+            addon.setSetting('tokens', json.dumps(tokens))
+            log('Refresh OK')
             return True
-    except:
-        pass
+        
+        resp.raise_for_status()
+    except Exception as e:
+        log('Refresh Failed: ' + str(e))
+    
+    if 'Authorization' in apiheaders: 
+        del apiheaders['Authorization']
+    addon.setSetting('tokens', '')
+    addon.setSetting('authorization', '')
     return False
 
 def api_query(slug):
     session = requests.Session()
-    
-    # currently nothing seems to require auth, so dont force through an OTP...
-    #get_auth(session)
+
+    if 'Authorization' not in apiheaders:
+        try:
+            bearer = addon.getSetting('authorization')
+        except:
+            bearer = ""
+        if bearer:
+            apiheaders['Authorization'] = bearer
 
     resp = session.get(apiurl + slug, headers=apiheaders)
-    if resp.status_code >= 400:
-        # if the auth failed, just delete the token so the next request will be unauthed
-        if resp.status_code == 401 and 'Authorization' in apiheaders:
-            del apiheaders['Authorization']
-            addon.setSetting('authorization', '')
-            
-            xbmcgui.Dialog().ok("Auth Fail", f"Authentication failed: {resp.status_code} {resp.reason}\n\nWill retry unauthenticated...")
-
-            resp = session.get(apiurl + slug, headers=apiheaders)
-            if resp.status_code < 400:
-                return resp.json()
-        else:
-            xbmcgui.Dialog().ok("API Fail", f"Remote API get {slug} failed: {resp.status_code} {resp.reason}")
-        return {}
-    else:
-        return resp.json()
+    if resp.status_code == 401 and 'Authorization' in apiheaders:
+        if not refresh(session):
+            xbmcgui.Dialog().ok("Auth Fail", f"Authentication refresh failed\n\nWill retry unauthenticated...")
+        resp = session.get(apiurl + slug, headers=apiheaders)
+    
+    resp.raise_for_status()
+    return resp.json()
 
 def list_main():
     data = api_query('menu-list')
@@ -161,13 +174,7 @@ def list_main():
             dopage(n.get('href', ''), n.get('name', ''))
         # store is type "external"
 
-
-    try:
-        w = int(addon.getSetting('tokenTime'))
-    except:
-        w = 0
-
-    if w + 86400 < time.time():
+    if 'Authorization' not in apiheaders:
         authItem = xbmcgui.ListItem("Log in")
         items.append((f'{PLUGIN_BASE}?action=login', authItem, False))
 
@@ -265,7 +272,7 @@ def contentItem(ci, season=0, episode=0):
         if not addon.getSetting('username'):
           title = '(Need Login) ' + title
         else:
-          title = '(No Access) ' + title
+          title = '(Locked) ' + title
     else:
         needLogin = False
     
@@ -319,8 +326,6 @@ def contentItem(ci, season=0, episode=0):
     return (itemid, item)
 
 def force_login():
-    addon.setSetting('tokenTime', '0')
-
     username = addon.getSetting('username')
 
     if not username:
