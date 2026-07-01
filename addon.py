@@ -66,11 +66,11 @@ def login(session:requests.Session):
                 xbmcgui.Dialog().ok("First Login", f"Log in via a web browser to set up your account.")
                 return False
             
-            if resp_obj.get('ageVerified', True):
+            if not resp_obj.get('ageVerified', True):
                 xbmcgui.Dialog().ok("Login Failed", f"Your account does not have a Date of Birth listed. Log in via a web browser and set your birthdate.")
                 return False
             
-            if resp_obj.get('ok', True):
+            if not resp_obj.get('ok', True):
                 log("ok is false: {}", json.dumps(resp_obj))
                 xbmcgui.Dialog().ok("Login Failed", f"Login attempt failed to send OTP code\n{resp.status_code} {resp.reason}")
                 return False
