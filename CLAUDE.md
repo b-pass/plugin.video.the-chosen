@@ -15,7 +15,16 @@ python3 -m py_compile addon.py
 python3 -c "import xml.dom.minidom as m; m.parse('addon.xml'); m.parse('resources/settings.xml')"
 ```
 
-For logic changes, a quick check is to stub the `xbmc*` modules, run `addon.py` with `sys.argv = ['plugin://plugin.video.the-chosen/', '1', '?action=...']` against the live API, and diff the recorded ListItems/URLs before and after. Unauthenticated GETs work. To test for real, install or symlink the repo into Kodi's `addons/` directory as `plugin.video.the-chosen`. Log lines start with `the-chosen : ` in `kodi.log`.
+For logic changes, a quick check is to stub the `xbmc*` modules, run `addon.py` with `sys.argv = ['plugin://plugin.video.the-chosen/', '1', '?action=...']` against the live API, and diff the recorded ListItems/URLs before and after. Unauthenticated GETs work.
+
+**Go easy on the live API.** api.watch.thechosen.tv is a production service, and we must not risk overloading it. Keep requests to a minimum:
+
+- Make limited probes only: a few representative pages or playlists, not every slug. Save responses to local files and work from those instead of re-fetching.
+- Anything that loops over endpoints (a script, a shell `for`, running old and new code side by side) must be rate-limited to at most 1 request per second, for example with `time.sleep(1)` between requests or `sleep 1` between runs. Remember that each `addon.py` run makes at least one request.
+- If a check needs more than a handful of requests, ask a human first.
+- Never run requests in parallel or retry in a tight loop. If the API returns errors (it sometimes returns a 500), back off instead of hammering it.
+
+To test for real, install or symlink the repo into Kodi's `addons/` directory as `plugin.video.the-chosen`. Log lines start with `the-chosen : ` in `kodi.log`.
 
 Runtime dependencies are declared in `addon.xml`: `xbmc.python` 3.0.1 (the minimum for Kodi 20, needed for the `InfoTagVideo` setters), `script.module.requests`, and `script.module.inputstreamhelper`. For a release, bump `version` in `addon.xml`; version bumps go in their own commits.
 
@@ -49,7 +58,9 @@ The dispatch is wrapped so that `requests.RequestException`/`ValueError` produce
 
 ### Conventions
 
-- Use `getem(data, 'a', 'b', 0, ...)` for nested lookups in API responses. It returns `{}` when a key or index is missing, null, or the wrong type. The API's shape changes often (see git history: GraphQL → REST rewrites, season-specific fixes), so parsing is deliberately defensive.
+- Every read from API JSON goes through `getem(data, 'a', 'b', 0, ..., default=...)`, never `d[k]` or `d.get(k)`, so a server-side change degrades one field or item instead of breaking a whole listing. Pass a `default` of the type you expect (`''`, `0`, `False`, `[]`, `{}`). It's returned when a key or index is missing or null, or when the value has another type. The exceptions are int ↔ str, which are converted (e.g. `"3288"` → `3288`, or a numeric `videoID` → `"184683594334"`). Without `default`, `getem` returns `{}` for missing values and doesn't check types. The API's shape changes often (see git history: GraphQL → REST rewrites, season-specific fixes), so parsing is deliberately defensive.
 - `log()` takes a finished string; build it with an f-string.
-- Season/episode numbers: an episode gets a season only from the API's `seasonNumber`. Then its episode number is its position in the playlist. Items without `seasonNumber` (extras, specials, livestreams) are plain `video` items. The `season-N` slug suffix only labels the folder in `list_page`, because extras playlists like `season-1-inside-season-1` match it too.
+- Every ListItem, including folders and "Log in", gets `setTvShowTitle(SHOW_TITLE)`.
+- Season/episode numbers: only real episodes (`is_episode`: `video_category == 'episode'` with a `seasonNumber`) get season, episode (`episodeNumber`, falling back to playlist position), and mediatype `episode`, and they're titled by `display_title` because `title` repeats "Season N Episode M:". Aftershows and Bible Roundtables also carry `seasonNumber`/`episodeNumber` (those of the episode they discuss), so they and everything else stay plain `video` items. `setSortEpisode(position)` keeps the API order. Playlist content is `episodes` if it has any real episode, otherwise `videos`.
+- Season folders: main-menu pages with href `season-N` are that season. In `list_page`, a playlist is a season folder only when its items are real episodes of a single season. Don't use slugs for this: `season-1-inside-season-1` is extras. Other folders get no mediatype.
 - `DO_CACHE` controls `cacheToDisc` for the main menu (only when logged in, so the "Log in" item doesn't linger) and for page listings. Playlist listings are never cached.

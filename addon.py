@@ -15,6 +15,7 @@ PLUGIN_BASE = ''
 HANDLE = -1
 DO_CACHE = True # set to False while debugging so Kodi doesn't reuse cached listings
 TIMEOUT = 30 # seconds, for every API request
+SHOW_TITLE = 'The Chosen' # everything this addon lists belongs to this show
 
 addon = xbmcaddon.Addon()
 
@@ -47,8 +48,13 @@ def kodi_version():
     except ValueError:
         return 0
 
-def getem(data, *keys):
-    # walk nested dicts/lists, returning {} if anything along the way is missing or null
+_ANY = object()
+
+def getem(data, *keys, default=_ANY):
+    # Walk nested dicts/lists from the API. If anything along the way is missing or null,
+    # return default ({} if none is given, which is safe to iterate or .items()). With a
+    # default, a result of another type is converted if it's a number <-> string mixup,
+    # or else also gives the default, so a server-side change can't raise here or later.
     for k in keys:
         if isinstance(k, int) and isinstance(data, list):
             data = data[k] if -len(data) <= k < len(data) else None
@@ -57,11 +63,24 @@ def getem(data, *keys):
         else:
             data = None
         if data is None:
-            return {}
-    return data
+            return {} if default is _ANY else default
+
+    if default is _ANY or isinstance(data, type(default)):
+        return data
+    try:
+        if isinstance(default, int) and not isinstance(default, bool) and isinstance(data, (str, float)):
+            return int(data)
+        if isinstance(default, str) and isinstance(data, (int, float)) and not isinstance(data, bool):
+            return str(data)
+    except ValueError:
+        pass
+    return default
 
 def save_tokens(tokens):
-    token = f"Bearer {tokens['idToken']}"
+    id_token = getem(tokens, 'idToken', default='')
+    if not id_token:
+        raise ValueError('no idToken in response')
+    token = f"Bearer {id_token}"
     apiheaders['Authorization'] = token
     addon.setSetting('authorization', token)
     addon.setSetting('tokens', json.dumps(tokens))
@@ -82,15 +101,15 @@ def login(session:requests.Session, username):
         resp.raise_for_status()
         resp_obj = resp.json()
 
-        if resp_obj.get('isNewUser', False):
+        if getem(resp_obj, 'isNewUser', default=False):
             xbmcgui.Dialog().ok("First Login", "Log in via a web browser to set up your account.")
             return False
 
-        if not resp_obj.get('ageVerified', True):
+        if not getem(resp_obj, 'ageVerified', default=True):
             xbmcgui.Dialog().ok("Login Failed", "Your account does not have a Date of Birth listed. Log in via a web browser and set your birthdate.")
             return False
 
-        if not resp.ok or not resp_obj.get('ok', True):
+        if not resp.ok or not getem(resp_obj, 'ok', default=True):
             log(f"request-otp failed: {json.dumps(resp_obj)}", level=xbmc.LOGWARNING)
             xbmcgui.Dialog().ok("Login Failed", f"Login attempt failed to send OTP code\n{resp.status_code} {resp.reason}")
             return False
@@ -112,21 +131,22 @@ def login(session:requests.Session, username):
 
 def refresh(session):
     try:
-        tokens = json.loads(addon.getSetting('tokens') or '{}')
+        tokens = getem(json.loads(addon.getSetting('tokens') or '{}'), default={})
     except ValueError:
         tokens = {}
-    if not tokens.get('refreshToken'):
+    refresh_token = getem(tokens, 'refreshToken', default='')
+    if not refresh_token:
         log('No refresh token')
         clear_tokens()
         return False
 
     status = 0
     try:
-        resp = session.post(apiurl + 'auth/refresh', headers=apiheaders, json={"refreshToken" : tokens['refreshToken']}, timeout=TIMEOUT)
+        resp = session.post(apiurl + 'auth/refresh', headers=apiheaders, json={"refreshToken" : refresh_token}, timeout=TIMEOUT)
         resp.raise_for_status()
 
         # keep the old refreshToken if the response doesn't include a new one
-        tokens.update(resp.json())
+        tokens.update(getem(resp.json(), default={}))
         save_tokens(tokens)
         log('Refresh OK')
         return True
@@ -178,11 +198,19 @@ def folder_item(title, season=0):
     item = xbmcgui.ListItem(label=title, offscreen=True)
     info = item.getVideoInfoTag()
     info.setTitle(title)
-    info.setTvShowTitle('The Chosen')
-    info.setMediaType('season')
+    info.setTvShowTitle(SHOW_TITLE)
     if season:
         info.setSeason(season)
+        info.setMediaType('season')
     return item
+
+def entry_video(entry):
+    return getem(entry, 'video', default={}) or getem(entry, 'livestream', default={})
+
+def is_episode(video):
+    # aftershows and roundtables also have season/episode numbers (of the episode they
+    # discuss), and specials are "episode"s without a season, so they aren't episodes
+    return getem(video, 'video_category', default='') == 'episode' and getem(video, 'seasonNumber', default=0) > 0
 
 def list_main():
     data = api_query('menu-list')
@@ -190,21 +218,23 @@ def list_main():
     items = []
     def add_page(slug, title):
         if slug and title and slug != 'home':
-            items.append((plugin_url(action='page', page=slug), folder_item(title), True))
+            m = re.fullmatch(r'season-(\d+)', slug)
+            item = folder_item(title.strip(), int(m.group(1)) if m else 0)
+            items.append((plugin_url(action='page', page=slug), item, True))
 
-    for n in getem(data, 'data', 'menus'):
-        itemtype = n.get('type', 'page')
+    for n in getem(data, 'data', 'menus', default=[]):
+        itemtype = getem(n, 'type', default='page')
         if itemtype == 'menu': # "Seasons" is a menu
-            for sub in n.get('children') or []:
-                if sub.get('type', 'page') == 'page':
-                    add_page(sub.get('href'), sub.get('name'))
+            for sub in getem(n, 'children', default=[]):
+                if getem(sub, 'type', default='page') == 'page':
+                    add_page(getem(sub, 'href', default=''), getem(sub, 'name', default=''))
         elif itemtype == 'page':
-            add_page(n.get('href'), n.get('name'))
+            add_page(getem(n, 'href', default=''), getem(n, 'name', default=''))
         # store is type "external"
 
     logged_in = 'Authorization' in apiheaders
     if not logged_in:
-        items.append((plugin_url(action='login'), xbmcgui.ListItem("Log in", offscreen=True), False))
+        items.append((plugin_url(action='login'), folder_item("Log in"), False))
 
     # don't cache the "Log in" item, or it would linger after logging in
     end_directory(items, FOLDER_SORTS, cache=DO_CACHE and logged_in)
@@ -213,20 +243,21 @@ def list_page(page):
     data = api_query(f'pages/by/{page}')
 
     items = []
-    for section in getem(data, 'data', 'sections'):
-        playlist = section.get('playlist') or section
-        if not playlist.get('items'):
+    for section in getem(data, 'data', 'sections', default=[]):
+        playlist = getem(section, 'playlist', default={}) or getem(section, default={})
+        entries = getem(playlist, 'items', default=[])
+        if not entries:
             continue
 
-        slug = playlist.get('slug') or section.get('href')
-        title = section.get('displayTitle') or playlist.get('title')
+        slug = getem(playlist, 'slug', default='') or getem(section, 'href', default='')
+        title = (getem(section, 'displayTitle', default='') or getem(playlist, 'title', default='')).strip()
         if not slug or not title:
             continue
 
-        # only for the folder: extras playlists like "season-1-inside-season-1" match
-        # too, so episodes get their season from the API instead
-        m = re.search(r'season-(\d+)$', slug)
-        item = folder_item(title, int(m.group(1)) if m else 0)
+        # a playlist of one season's episodes is that season; slugs are no help here,
+        # since "season-1-inside-season-1" is extras and some seasons' pages have no episodes
+        seasons = {getem(v, 'seasonNumber', default=0) for v in map(entry_video, entries) if is_episode(v)}
+        item = folder_item(title, seasons.pop() if len(seasons) == 1 else 0)
         items.append((plugin_url(action='playlist', playlist=slug), item, True))
 
     end_directory(items, FOLDER_SORTS, cache=True)
@@ -235,10 +266,12 @@ def list_playlist(playlist):
     data = api_query(f'playlists/{playlist}')
 
     items = []
-    for entry in getem(data, 'data', 'items'):
-        (itemid, item) = content_item(entry, episode=len(items)+1)
+    has_episodes = False
+    for entry in getem(data, 'data', 'items', default=[]):
+        (itemid, item) = content_item(entry, position=len(items)+1)
         if item is None:
             continue
+        has_episodes = has_episodes or item.getVideoInfoTag().getMediaType() == 'episode'
         if itemid:
             item.setProperty('IsPlayable', 'true')
             items.append((plugin_url(action='play', playlist=playlist, itemid=itemid), item, False))
@@ -250,20 +283,24 @@ def list_playlist(playlist):
         xbmcplugin.SORT_METHOD_VIDEO_RUNTIME,
         xbmcplugin.SORT_METHOD_UNSORTED,
         xbmcplugin.SORT_METHOD_TITLE_IGNORE_THE,
-    ), content='episode', cache=False)
+    ), content='episodes' if has_episodes else 'videos', cache=False)
 
-def content_item(entry, episode):
+def content_item(entry, position):
     # returns (itemid, item); itemid is None for locked videos, item is None to skip the entry
-    ep = entry.get('video') or entry.get('livestream')
+    ep = entry_video(entry)
     if not ep:
         return (None, None)
 
-    locked = ep.get('isLocked', False)
-    itemid = None if locked else ep.get('videoID')
+    locked = getem(ep, 'isLocked', default=False)
+    itemid = None if locked else getem(ep, 'videoID', default='')
     if not locked and not itemid:
         return (None, None)
 
-    title = ep.get('title') or ''
+    episode = is_episode(ep)
+    # episode titles are like "Season 1 Episode 1: I Have Called You By Name", which
+    # repeats the season/episode numbers, so use the bare display_title for those.
+    # Aftershows' display_titles are sometimes just "Aftershow", so others use title.
+    title = ((episode and getem(ep, 'display_title', default='')) or getem(ep, 'title', default='')).strip()
     if locked:
         title = ('(Locked) ' if 'Authorization' in apiheaders else '(Need Login) ') + title
 
@@ -271,30 +308,31 @@ def content_item(entry, episode):
 
     item = xbmcgui.ListItem(title, offscreen=True)
     info = item.getVideoInfoTag()
-    info.setTvShowTitle('The Chosen')
+    info.setTvShowTitle(SHOW_TITLE)
     info.setTitle(title)
-    info.setPlot(ep.get('description') or '')
+    info.setPlot(getem(ep, 'description', default=''))
 
-    art = {k: v for k, v in (ep.get('thumbs') or {}).items() if v}
+    art = {k: v for k, v in getem(ep, 'thumbs', default={}).items() if isinstance(v, str) and v}
     if 'landscape' in art:
         art.setdefault('thumb', art['landscape'])
     if 'portrait' in art:
         art.setdefault('poster', art['portrait'])
     item.setArt(art)
 
-    dur = ep.get('duration')
-    if dur:
-        info.setDuration(int(dur))
+    dur = getem(ep, 'duration', default=0)
+    if dur > 0:
+        info.setDuration(dur)
 
-    # extras have no season; only real episodes get season/episode numbers
-    season = ep.get('seasonNumber')
-    if season:
-        info.setSeason(int(season))
-        info.setEpisode(episode)
+    # only real episodes get season/episode numbers, so e.g. an aftershow isn't taken
+    # for the episode it discusses (by Trakt, or "next episode" in skins)
+    if episode:
+        info.setSeason(getem(ep, 'seasonNumber', default=0))
+        info.setEpisode(getem(ep, 'episodeNumber', default=0) or position)
         info.setMediaType('episode')
     else:
         info.setMediaType('video')
-    info.setSortEpisode(episode)
+    # keep the API's order when sorting by episode
+    info.setSortEpisode(position)
 
     return (itemid, item)
 
@@ -311,8 +349,9 @@ def force_login():
 
 def play_video(itemid):
     video = api_query(f'videos/{itemid}')
+    # each stream is {"url": ..., "type": "hls"}, or maybe a bare URL string
     stream = getem(video, 'details', 'video', 0)
-    url = stream.get('url') if isinstance(stream, dict) else stream
+    url = getem(stream, 'url', default='') or getem(stream, default='')
 
     if not url:
         # locked videos come back with empty details
