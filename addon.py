@@ -90,6 +90,8 @@ def clear_tokens():
     addon.setSetting('authorization', '')
     addon.setSetting('tokens', '')
 
+NOT_SET_UP_MSG = "Your account setup isn't finished. Log in at watch.thechosen.tv in a web browser, complete the sign-up steps, then try again."
+
 def login(session:requests.Session, username):
     clear_tokens()
     if not username:
@@ -101,17 +103,16 @@ def login(session:requests.Session, username):
         resp.raise_for_status()
         resp_obj = resp.json()
 
-        if getem(resp_obj, 'isNewUser', default=False):
-            xbmcgui.Dialog().ok("First Login", "Log in via a web browser to set up your account.")
-            return False
-
-        if not getem(resp_obj, 'ageVerified', default=True):
-            xbmcgui.Dialog().ok("Login Failed", "Your account does not have a Date of Birth listed. Log in via a web browser and set your birthdate.")
-            return False
-
-        if not resp.ok or not getem(resp_obj, 'ok', default=True):
+        if not resp.ok or not getem(resp_obj, 'ok', default=True) or not getem(resp_obj, 'success', default=True):
             log(f"request-otp failed: {json.dumps(resp_obj)}", level=xbmc.LOGWARNING)
             xbmcgui.Dialog().ok("Login Failed", f"Login attempt failed to send OTP code\n{resp.status_code} {resp.reason}")
+            return False
+
+        # like the website: only an explicit ageVerified=true is a normal login, anything else means
+        # the account still has to go through the website's sign-up steps (age confirmation, profile)
+        if getem(resp_obj, 'isNewUser', default=False) or not getem(resp_obj, 'ageVerified', default=False):
+            log(f"request-otp says account isn't set up: {json.dumps(resp_obj)}")
+            xbmcgui.Dialog().ok("Account Not Set Up", NOT_SET_UP_MSG)
             return False
 
         code = xbmcgui.Dialog().numeric(0, "Enter One Time code from email")
@@ -119,7 +120,13 @@ def login(session:requests.Session, username):
             return False
 
         resp = session.post(otpurl + 'verify-otp', headers=apiheaders, json={"email" : username, "code" : code.zfill(6)}, timeout=TIMEOUT)
-        save_tokens(resp.json())
+        resp_obj = resp.json()
+        if not getem(resp_obj, 'idToken', default='') and getem(resp_obj, 'signupToken', default=''):
+            # a sign-up token instead of a login means the website's sign-up steps aren't done
+            log('verify-otp returned a signupToken, not an idToken')
+            xbmcgui.Dialog().ok("Account Not Set Up", NOT_SET_UP_MSG)
+            return False
+        save_tokens(resp_obj)
         log('Login OK')
         return True
     except (requests.RequestException, ValueError, KeyError) as e:
