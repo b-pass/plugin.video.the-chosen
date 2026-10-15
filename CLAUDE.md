@@ -26,7 +26,7 @@ For logic changes, a quick check is to stub the `xbmc*` modules, run `addon.py` 
 
 To test for real, install or symlink the repo into Kodi's `addons/` directory as `plugin.video.the-chosen`. Log lines start with `the-chosen : ` in `kodi.log`.
 
-Runtime dependencies are declared in `addon.xml`: `xbmc.python` 3.0.1 (the minimum for Kodi 20, needed for the `InfoTagVideo` setters), `script.module.requests`, and `script.module.inputstreamhelper`. For a release, bump `version` in `addon.xml`; version bumps go in their own commits.
+Runtime dependencies are declared in `addon.xml`: `xbmc.python` 3.0.1 (the minimum for Kodi 20, needed for the `InfoTagVideo` setters), `script.module.requests`, and `script.module.inputstreamhelper`. For a release, bump `version` in `addon.xml`; version bumps go in their own commits. Tag the release commit with the bare version (e.g. `0.5.3`), push the tag, then run `./make-release.sh` to build the zip (top-level dir `plugin.video.the-chosen/`, no `*.md`) and attach it to a draft GitHub release.
 
 ## Architecture
 
