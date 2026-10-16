@@ -26,7 +26,7 @@ fi
 OUT=$(mktemp -d)
 ZIP="$OUT/$ADDON_ID-$VERSION.zip"
 git archive --format=zip --prefix="$ADDON_ID/" -o "$ZIP" "$VERSION" -- . \
-    ':(exclude)*.md' ':(exclude)make-release.sh'
+    ':(exclude)*.md' ':(exclude)make-release.sh' ':(exclude).gitignore'
 unzip -l "$ZIP"
 
 gh release create "$VERSION" "$ZIP" --draft --verify-tag --title "$TITLE" --notes ""

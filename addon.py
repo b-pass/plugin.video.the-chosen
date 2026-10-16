@@ -314,6 +314,10 @@ def content_item(entry, position):
     # the old app showed "(Upcoming)" from a "state" field; the new API has "starts_at" instead, but it's always null so far
 
     item = xbmcgui.ListItem(title, offscreen=True)
+    if locked:
+        # 3 is ICON_OVERLAY_LOCKED. 'overlay' isn't deprecated in setInfo and has no InfoTagVideo setter.
+        # Kodi (as of 22) overwrites it with watched/unwatched for video items, but it's here in case that changes.
+        item.setInfo('video', {'overlay': 3})
     info = item.getVideoInfoTag()
     info.setTvShowTitle(SHOW_TITLE)
     info.setTitle(title)
