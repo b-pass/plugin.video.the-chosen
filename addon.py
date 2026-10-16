@@ -344,11 +344,13 @@ def content_item(entry, position):
     return (itemid, item)
 
 def force_login():
-    username = addon.getSetting('username')
+    username = addon.getSetting('username').strip()
     if not username:
-        addon.openSettings()
-        # a fresh instance, so we see what the user just entered
-        username = xbmcaddon.Addon().getSetting('username')
+        username = xbmcgui.Dialog().input("Email address for your Chosen account").strip()
+        if not username:
+            return
+        # remember it, so next time we go straight to the code
+        addon.setSetting('username', username)
 
     if login(requests.Session(), username):
         # reload the listing so the "Log in" item goes away and locked items unlock
